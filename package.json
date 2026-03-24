@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "prisma generate --schema=prisma/schema.prisma && prisma migrate deploy --schema=prisma/schema.prisma",
-    "start": "tsx start.ts",
-    "seed": "tsx prisma/seed.ts",
+    "build": "bun prisma generate --schema=prisma/schema.prisma && bun prisma migrate deploy --schema=prisma/schema.prisma",
+    "start": "bun start.ts",
+    "seed": "bun prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",

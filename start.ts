@@ -8,7 +8,7 @@ async function main() {
   const userCount = await prisma.user.count();
   if (userCount === 0) {
     console.log('Database is empty — running seed...');
-    execSync('tsx prisma/seed.ts', { stdio: 'inherit' });
+    execSync('bun prisma/seed.ts', { stdio: 'inherit' });
     console.log('Seed complete.');
   } else {
     console.log(`Database already seeded (${userCount} users found).`);
