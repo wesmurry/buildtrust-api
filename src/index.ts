@@ -17,9 +17,10 @@ import { planRoutes } from './routes/plans.js';
 
 const app = Fastify({ logger: true });
 
-// CORS
+// CORS — support comma-separated origins for multi-environment
+const allowedOrigins = env.FRONTEND_URL.split(',').map(s => s.trim());
 await app.register(cors, {
-  origin: env.FRONTEND_URL,
+  origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
 });
