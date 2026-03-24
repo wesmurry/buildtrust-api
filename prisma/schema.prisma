@@ -1,0 +1,442 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(cuid())
+  externalId     String?         @unique
+  email          String          @unique
+  name           String
+  role           Role
+  phone          String?
+  avatar         String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  ownedProjects  Project[]       @relation("ProjectOwner")
+  gcProjects     Project[]       @relation("ProjectGC")
+  changeOrders   ChangeOrder[]   @relation("ChangeOrderInitiator")
+  comments       Comment[]
+}
+
+enum Role {
+  OWNER
+  GC
+  ADMIN
+}
+
+model Project {
+  id             String          @id @default(cuid())
+  name           String
+  address        String
+  status         ProjectStatus   @default(PLANNING)
+  totalBudget    Float?
+  gcFeeModel     GCFeeModel      @default(PERCENTAGE)
+  gcFeeAmount    Float           @default(20)
+  squareFootage  Float?
+  stories        Int?
+  bedroomCount   Int?
+  bathroomCount  Float?
+  garageType     String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  ownerId        String
+  owner          User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  gcId           String?
+  gc             User?           @relation("ProjectGC", fields: [gcId], references: [id])
+
+  planSets       PlanSet[]
+  trades         Trade[]
+  changeOrders   ChangeOrder[]
+  payments       Payment[]
+  materials      MaterialItem[]
+  selections     Selection[]
+  inspections    Inspection[]
+  savings        SavingsEntry[]
+  scheduleItems  ScheduleItem[]
+}
+
+enum ProjectStatus {
+  PLANNING
+  PRE_CONSTRUCTION
+  ACTIVE
+  PUNCH_LIST
+  COMPLETE
+}
+
+enum GCFeeModel {
+  PERCENTAGE
+  FLAT
+}
+
+model PlanSet {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  fileName       String
+  fileUrl        String
+  fileSize       Int
+  pageCount      Int?
+  status         PlanSetStatus   @default(UPLOADED)
+  createdAt      DateTime        @default(now())
+
+  sheets         PlanSheet[]
+  parsedData     PlanParsedData?
+}
+
+enum PlanSetStatus {
+  UPLOADED
+  PROCESSING
+  PARSED
+  REVIEWED
+  ERROR
+}
+
+model PlanSheet {
+  id             String          @id @default(cuid())
+  planSetId      String
+  planSet        PlanSet         @relation(fields: [planSetId], references: [id])
+  pageNumber     Int
+  sheetType      String?
+  thumbnailUrl   String?
+  extractedText  String?         @db.Text
+  imageUrl       String?
+}
+
+model PlanParsedData {
+  id               String        @id @default(cuid())
+  planSetId        String        @unique
+  planSet          PlanSet       @relation(fields: [planSetId], references: [id])
+  projectInfo      Json?
+  roomSchedule     Json?
+  doorSchedule     Json?
+  windowSchedule   Json?
+  fixtureCount     Json?
+  structuralNotes  Json?
+  finishSchedule   Json?
+  rawExtractions   Json?
+  confidence       Json?
+  reviewedSections Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Trade {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  name           String
+  category       String
+  displayOrder   Int             @default(0)
+  status         TradeStatus     @default(NOT_STARTED)
+  estimatedLow   Float?
+  estimatedHigh  Float?
+  description    String?         @db.Text
+  awardedBidId   String?
+
+  bids           Bid[]
+  budgetItem     BudgetLineItem?
+  scopeDocument  ScopeDocument?
+  invoices       Invoice[]
+  scheduleItems  ScheduleItem[]
+}
+
+enum TradeStatus {
+  NOT_STARTED
+  SCOPE_WRITTEN
+  OUT_FOR_BID
+  AWARDED
+  IN_PROGRESS
+  COMPLETE
+}
+
+model ScopeDocument {
+  id               String        @id @default(cuid())
+  tradeId          String        @unique
+  trade            Trade         @relation(fields: [tradeId], references: [id])
+  descriptionOfWork String       @db.Text
+  inclusions       Json
+  exclusions       Json
+  materialSpecs    Json
+  qualityStandards Json
+  timelineReqs     String?       @db.Text
+  version          Int           @default(1)
+  generatedByAI    Boolean       @default(true)
+  editedByUser     Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Subcontractor {
+  id             String          @id @default(cuid())
+  name           String
+  company        String?
+  email          String
+  phone          String?
+  rating         Float?
+  pastProjects   Int?
+  trades         String[]
+  notes          String?         @db.Text
+  createdAt      DateTime        @default(now())
+
+  bids           Bid[]
+}
+
+model Bid {
+  id              String          @id @default(cuid())
+  tradeId         String
+  trade           Trade           @relation(fields: [tradeId], references: [id])
+  subcontractorId String
+  subcontractor   Subcontractor   @relation(fields: [subcontractorId], references: [id])
+  totalAmount     Float?
+  laborCost       Float?
+  materialCost    Float?
+  markupPercent   Float?
+  timeline        String?
+  status          BidStatus       @default(REQUESTED)
+  submittedAt     DateTime?
+  notes           String?         @db.Text
+  attachmentUrl   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+enum BidStatus {
+  REQUESTED
+  VIEWED
+  RECEIVED
+  DECLINED
+  AWARDED
+}
+
+model BudgetLineItem {
+  id             String          @id @default(cuid())
+  tradeId        String          @unique
+  trade          Trade           @relation(fields: [tradeId], references: [id])
+  estimated      Float           @default(0)
+  bidAmount      Float           @default(0)
+  committed      Float           @default(0)
+  actualToDate   Float           @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model ChangeOrder {
+  id             String            @id @default(cuid())
+  projectId      String
+  project        Project           @relation(fields: [projectId], references: [id])
+  number         Int
+  description    String            @db.Text
+  reason         ChangeOrderReason
+  initiatedById  String
+  initiatedBy    User              @relation("ChangeOrderInitiator", fields: [initiatedById], references: [id])
+  tradesAffected String[]
+  costImpact     Float
+  scheduleImpact Int               @default(0)
+  status         ChangeOrderStatus @default(DRAFT)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  comments       Comment[]
+  attachments    Attachment[]
+}
+
+enum ChangeOrderReason {
+  OWNER_REQUEST
+  ARCHITECT_REVISION
+  FIELD_CONDITION
+  CODE_REQUIREMENT
+}
+
+enum ChangeOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model Comment {
+  id             String          @id @default(cuid())
+  changeOrderId  String
+  changeOrder    ChangeOrder     @relation(fields: [changeOrderId], references: [id])
+  authorId       String
+  author         User            @relation(fields: [authorId], references: [id])
+  content        String          @db.Text
+  createdAt      DateTime        @default(now())
+}
+
+model Attachment {
+  id             String          @id @default(cuid())
+  changeOrderId  String
+  changeOrder    ChangeOrder     @relation(fields: [changeOrderId], references: [id])
+  fileName       String
+  fileUrl        String
+  fileType       String
+  createdAt      DateTime        @default(now())
+}
+
+model Payment {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  drawNumber     Int
+  milestone      String
+  amount         Float
+  payee          String
+  tradeId        String?
+  invoiceNumber  String?
+  status         PaymentStatus   @default(UPCOMING)
+  scheduledDate  DateTime
+  paidDate       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+enum PaymentStatus {
+  UPCOMING
+  READY
+  PAID
+}
+
+model Invoice {
+  id             String          @id @default(cuid())
+  tradeId        String
+  trade          Trade           @relation(fields: [tradeId], references: [id])
+  invoiceNumber  String
+  amount         Float
+  fileUrl        String?
+  receivedDate   DateTime
+  paidDate       DateTime?
+  notes          String?         @db.Text
+  createdAt      DateTime        @default(now())
+}
+
+model MaterialItem {
+  id                  String          @id @default(cuid())
+  projectId           String
+  project             Project         @relation(fields: [projectId], references: [id])
+  name                String
+  specification       String?
+  category            String
+  supplier            String?
+  unitCost            Float?
+  quantity            Float?
+  totalCost           Float?
+  leadTimeDays        Int?
+  orderDate           DateTime?
+  expectedDelivery    DateTime?
+  neededByDate        DateTime?
+  status              MaterialStatus  @default(NOT_ORDERED)
+  alternativeSuppliers Json?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
+
+enum MaterialStatus {
+  NOT_ORDERED
+  ORDERED
+  SHIPPED
+  DELIVERED
+  INSTALLED
+}
+
+model Selection {
+  id              String          @id @default(cuid())
+  projectId       String
+  project         Project         @relation(fields: [projectId], references: [id])
+  category        String
+  subcategory     String?
+  allowanceAmount Float
+  selectedProduct String?
+  selectedCost    Float?
+  supplier        String?
+  photoUrl        String?
+  specUrl         String?
+  status          SelectionStatus @default(NOT_SELECTED)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+enum SelectionStatus {
+  NOT_SELECTED
+  SELECTED
+  ORDERED
+  INSTALLED
+}
+
+model Inspection {
+  id               String            @id @default(cuid())
+  projectId        String
+  project          Project           @relation(fields: [projectId], references: [id])
+  type             String
+  displayOrder     Int               @default(0)
+  requiredDate     DateTime?
+  scheduledDate    DateTime?
+  inspector        String?
+  result           InspectionResult?
+  notes            String?           @db.Text
+  corrections      String?           @db.Text
+  reInspectionDate DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+enum InspectionResult {
+  PASS
+  FAIL
+  CONDITIONAL
+}
+
+model ScheduleItem {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  tradeId        String?
+  trade          Trade?          @relation(fields: [tradeId], references: [id])
+  name           String
+  phase          String
+  startDate      DateTime
+  endDate        DateTime
+  duration       Int?
+  progress       Int             @default(0)
+  dependencies   String[]
+  status         ScheduleStatus  @default(NOT_STARTED)
+  isMilestone    Boolean         @default(false)
+  notes          String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+enum ScheduleStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  DELAYED
+}
+
+model SavingsEntry {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  date           DateTime
+  category       SavingsCategory
+  description    String
+  amountSaved    Float
+  source         String?
+  createdAt      DateTime        @default(now())
+}
+
+enum SavingsCategory {
+  COMPETITIVE_BIDDING
+  MATERIAL_SOURCING
+  NEGOTIATION
+  SCOPE_OPTIMIZATION
+  OTHER
+}
