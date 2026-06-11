@@ -40,6 +40,9 @@ export function resolveLocale(address: string): Locale {
   if (a.includes('austin') || (a.includes(' tx') && a.includes('787'))) {
     return { msaCode: '12420', msaName: 'Austin-Round Rock-San Marcos, TX', state: 'TX' };
   }
+  if (a.includes('lexington') || (a.includes(' ky') && a.includes('405'))) {
+    return { msaCode: '30460', msaName: 'Lexington-Fayette, KY', state: 'KY' };
+  }
   return {
     msaCode: '12420',
     msaName: 'Austin-Round Rock-San Marcos, TX',
