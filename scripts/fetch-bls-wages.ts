@@ -10,6 +10,7 @@
 // OEWS series id: OEUM + 7-digit area + 000000 (cross-industry) + SOC(6) + datatype
 //   datatype 08 = hourly median wage, 09 = hourly 75th percentile.
 
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
