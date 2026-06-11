@@ -25,6 +25,12 @@ async function main() {
   await prisma.trade.deleteMany({ where: { projectId: 'p2' } });
   await prisma.project.deleteMany({ where: { id: 'p2' } });
 
+  await prisma.user.upsert({
+    where: { id: 'u3' },
+    update: {},
+    create: { id: 'u3', email: 'wmurry@wm-investments.com', name: 'Wes Murry', role: 'OWNER' },
+  });
+
   await prisma.project.create({
     data: {
       id: 'p2',
@@ -38,7 +44,7 @@ async function main() {
       bedroomCount: 5,
       bathroomCount: 7,
       garageType: '3-car',
-      ownerId: 'u1',
+      ownerId: 'u3',
       gcId: 'u2',
     },
   });
