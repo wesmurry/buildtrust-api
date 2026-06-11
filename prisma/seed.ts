@@ -1,11 +1,22 @@
 import { PrismaClient } from '@prisma/client';
+import { seedFairness } from './seed-fairness.js';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding database...');
 
-  // Clean existing data
+  // Clean existing data — fairness tables first (they reference Trade/Bid)
+  await prisma.fairPriceAssessment.deleteMany();
+  await prisma.bidLineItem.deleteMany();
+  await prisma.bidDocument.deleteMany();
+  await prisma.scopeLineItem.deleteMany();
+  await prisma.laborUnit.deleteMany();
+  await prisma.wageRate.deleteMany();
+  await prisma.burdenFactor.deleteMany();
+  await prisma.tradeMarginNorm.deleteMany();
+  await prisma.materialPriceRef.deleteMany();
+  await prisma.marketHeatFactor.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.changeOrder.deleteMany();
@@ -282,6 +293,8 @@ async function main() {
   for (const sch of scheduleData) {
     await prisma.scheduleItem.create({ data: sch });
   }
+
+  await seedFairness(prisma);
 
   console.log('Seed complete!');
 }

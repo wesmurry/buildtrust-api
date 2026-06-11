@@ -3,6 +3,7 @@ import type {
   ChangeOrder, Payment, MaterialItem, Selection, Inspection,
   SavingsEntry, ScheduleItem,
 } from '@prisma/client';
+import { ValidationError } from './errors.js';
 
 // --- Enum Conversions ---
 
@@ -24,6 +25,18 @@ export function enumToKebab(value: string): string {
 
 export function kebabToEnum(value: string): string {
   return value.toUpperCase().replace(/-/g, '_');
+}
+
+/** Convert a kebab-case API value to a Prisma enum member, rejecting unknown values with a 400 instead of a Prisma 500. */
+export function kebabToEnumStrict<T extends string>(value: string, allowed: Record<string, T>): T {
+  const converted = kebabToEnum(value);
+  const members = Object.values(allowed);
+  if (!members.includes(converted as T)) {
+    throw new ValidationError(
+      `Invalid value '${value}' — expected one of: ${members.map(enumToKebab).join(', ')}`,
+    );
+  }
+  return converted as T;
 }
 
 export function roleToFrontend(role: string): string {

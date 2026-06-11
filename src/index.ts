@@ -14,6 +14,7 @@ import { selectionRoutes } from './routes/selections.js';
 import { inspectionRoutes } from './routes/inspections.js';
 import { savingsRoutes } from './routes/savings.js';
 import { planRoutes } from './routes/plans.js';
+import { fairnessRoutes } from './routes/fairness.js';
 
 const app = Fastify({ logger: true });
 
@@ -44,6 +45,7 @@ await app.register(selectionRoutes);
 await app.register(inspectionRoutes);
 await app.register(savingsRoutes);
 await app.register(planRoutes);
+await app.register(fairnessRoutes);
 
 // Start
 try {

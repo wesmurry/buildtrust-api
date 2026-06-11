@@ -5,7 +5,8 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roles.js';
 import { validateBody } from '../middleware/validation.js';
 import { NotFoundError } from '../utils/errors.js';
-import { serializeChangeOrder, kebabToEnum } from '../utils/serialize.js';
+import { serializeChangeOrder, kebabToEnumStrict } from '../utils/serialize.js';
+import { ChangeOrderReason, ChangeOrderStatus } from '@prisma/client';
 
 const createChangeOrderSchema = z.object({
   description: z.string(),
@@ -53,7 +54,7 @@ export async function changeOrderRoutes(app: FastifyInstance) {
         data: {
           projectId: request.params.id,
           number: (maxNumber?.number ?? 0) + 1,
-          reason: kebabToEnum(reason),
+          reason: kebabToEnumStrict(reason, ChangeOrderReason),
           initiatedById: request.user.id,
           ...rest,
         },
@@ -70,8 +71,8 @@ export async function changeOrderRoutes(app: FastifyInstance) {
     async (request) => {
       const { status, reason, ...rest } = request.body;
       const data: any = { ...rest };
-      if (status) data.status = kebabToEnum(status);
-      if (reason) data.reason = kebabToEnum(reason);
+      if (status) data.status = kebabToEnumStrict(status, ChangeOrderStatus);
+      if (reason) data.reason = kebabToEnumStrict(reason, ChangeOrderReason);
 
       const changeOrder = await prisma.changeOrder.update({
         where: { id: request.params.id },

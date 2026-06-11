@@ -145,6 +145,8 @@ model Trade {
   scopeDocument  ScopeDocument?
   invoices       Invoice[]
   scheduleItems  ScheduleItem[]
+  scopeLineItems ScopeLineItem[]
+  assessments    FairPriceAssessment[]
 }
 
 enum TradeStatus {
@@ -205,6 +207,10 @@ model Bid {
   attachmentUrl   String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+
+  documents       BidDocument[]
+  lineItems       BidLineItem[]
+  assessments     FairPriceAssessment[]
 }
 
 enum BidStatus {
@@ -439,4 +445,221 @@ enum SavingsCategory {
   NEGOTIATION
   SCOPE_OPTIMIZATION
   OTHER
+}
+
+// ============================================================================
+// FAIRNESS ENGINE (schema v2)
+//
+// Conventions that differ from the legacy tables above:
+//   - All money is integer CENTS (penny-safe). Never Float.
+//   - Every reference-data row carries a DataSource + sourceRef so each layer
+//     of a fair-price band is auditable down to its origin.
+//   - The bottom-up layers (labor units, wages, materials, margins) are kept
+//     structurally separate from PLATFORM_OBSERVED data so the two can never
+//     silently feed each other (anti-circularity).
+// ============================================================================
+
+enum DataSource {
+  BLS_OEWS           // Bureau of Labor Statistics OEWS wage data (public)
+  PUBLISHED_ESTIMATE // Rule-of-thumb from published trade literature — placeholder pending licensed data
+  PHCC               // PHCC Labor Unit Database (license required)
+  NECA               // NECA Manual of Labor Units (license required)
+  MCAA               // MCAA WebLEM (license required)
+  CRAFTSMAN          // Craftsman Book licensed cost data
+  SUPPLIER_FEED      // Live supplier / dealer material pricing
+  PLATFORM_OBSERVED  // BuildTrust's own bid flow — never mixed into bottom-up layers
+  MANUAL             // Builder-entered
+}
+
+enum ScopeLineCategory {
+  LABOR
+  MATERIAL
+  EQUIPMENT
+  ALLOWANCE
+  GENERAL
+}
+
+// One row of the trade's scope sheet — the normalization key for leveling.
+model ScopeLineItem {
+  id            String            @id @default(cuid())
+  tradeId       String
+  trade         Trade             @relation(fields: [tradeId], references: [id])
+  csiCode       String?
+  description   String
+  category      ScopeLineCategory @default(GENERAL)
+  quantity      Float
+  unit          String            // SF, LF, EA, SQ, CY, HR, LS
+  laborTaskCode String?           // -> LaborUnit.taskCode (LABOR lines)
+  materialCode  String?           // -> MaterialPriceRef.itemCode (MATERIAL lines)
+  displayOrder  Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  bidLineItems  BidLineItem[]
+}
+
+// Raw artifact a sub sent (email body, OCR'd PDF text) + parse provenance.
+model BidDocument {
+  id              String    @id @default(cuid())
+  bidId           String
+  bid             Bid       @relation(fields: [bidId], references: [id])
+  fileName        String?
+  rawText         String    @db.Text
+  parsedAt        DateTime?
+  parseModel      String?
+  parserVersion   String?
+  parseConfidence Float?
+  createdAt       DateTime  @default(now())
+}
+
+enum BidLineKind {
+  INCLUSION
+  EXCLUSION
+  ALLOWANCE
+  ALTERNATE
+}
+
+// A leveled line of a sub's bid, matched (where possible) to the scope sheet.
+model BidLineItem {
+  id              String         @id @default(cuid())
+  bidId           String
+  bid             Bid            @relation(fields: [bidId], references: [id])
+  scopeLineItemId String?
+  scopeLineItem   ScopeLineItem? @relation(fields: [scopeLineItemId], references: [id])
+  description     String
+  kind            BidLineKind    @default(INCLUSION)
+  quantity        Float?
+  unit            String?
+  unitPriceCents  Int?
+  totalCents      Int            @default(0)
+  laborCents      Int?
+  materialCents   Int?
+  confidence      Float?         // AI parse confidence, null when manually entered
+  sourceText      String?        @db.Text // provenance: text span this line came from
+  createdAt       DateTime       @default(now())
+}
+
+// Labor productivity: hours per unit of work, by trade task.
+model LaborUnit {
+  id            String     @id @default(cuid())
+  tradeCategory String     // matches Trade.category
+  taskCode      String     @unique
+  description   String
+  unit          String     // per SF, EA, SQ, LF...
+  hoursPerUnit  Float
+  conditions    String?    // "standard conditions" caveats
+  source        DataSource
+  sourceRef     String?
+  effectiveDate DateTime?
+}
+
+// Local prevailing wages by metro + occupation (BLS OEWS).
+model WageRate {
+  id                String     @id @default(cuid())
+  msaCode           String     // BLS MSA code, e.g. 12420 = Austin-Round Rock
+  msaName           String
+  socCode           String     // e.g. 47-2111
+  occupation        String
+  hourlyMedianCents Int
+  hourlyP75Cents    Int
+  source            DataSource
+  sourceRef         String?    // BLS series id
+  asOf              DateTime
+
+  @@unique([msaCode, socCode, asOf])
+}
+
+// Wage -> burdened crew cost conversion, by state + trade.
+model BurdenFactor {
+  id             String     @id @default(cuid())
+  state          String
+  tradeCategory  String
+  payrollTaxPct  Float      // e.g. 0.09
+  workersCompPct Float      // e.g. 0.07 — the dominant per-trade variable
+  otherPct       Float      @default(0)
+  multiplier     Float      // 1 + sum of the above, stored for convenience
+  source         DataSource
+  sourceRef      String?
+
+  @@unique([state, tradeCategory])
+}
+
+// Per-trade overhead + net margin norms (the O&P layer of the band).
+model TradeMarginNorm {
+  id              String     @id @default(cuid())
+  tradeCategory   String     @unique
+  overheadPctLow  Float
+  overheadPctHigh Float
+  netMarginPctLow Float
+  netMarginPctHigh Float
+  basis           String?    // e.g. "residential install margins, not blended service"
+  source          DataSource
+  sourceRef       String?
+  asOf            DateTime?
+}
+
+// Reference material prices (licensed data or supplier feeds).
+model MaterialPriceRef {
+  id             String     @id @default(cuid())
+  itemCode       String
+  description    String
+  unit           String
+  unitPriceCents Int
+  region         String     // metro code or 'US'
+  source         DataSource
+  sourceRef      String?
+  asOf           DateTime
+
+  @@unique([itemCode, region, asOf])
+}
+
+// Market-heat adjustment: subs price by backlog, not cost, in hot markets.
+model MarketHeatFactor {
+  id            String     @id @default(cuid())
+  msaCode       String
+  tradeCategory String
+  factor        Float      // 1.00 neutral; 1.08 = +8%
+  basis         String
+  source        DataSource
+  asOf          DateTime
+
+  @@unique([msaCode, tradeCategory, asOf])
+}
+
+enum AssessmentStatus {
+  BLOCKED_SCOPE_GATE // leveling gate failed — no verdict may be rendered
+  DRAFT              // computed, awaiting builder review
+  BUILDER_REVIEWED   // builder approved the assessment
+  CLIENT_VISIBLE     // published to the homeowner portal
+}
+
+enum VerdictZone {
+  WITHIN_RANGE
+  ABOVE_RANGE // with the line items driving it
+  BELOW_RANGE // scope-gap risk: verify coverage before celebrating
+}
+
+// One computed fair-price band for a trade (optionally against a specific bid).
+model FairPriceAssessment {
+  id                 String           @id @default(cuid())
+  tradeId            String
+  trade              Trade            @relation(fields: [tradeId], references: [id])
+  bidId              String?
+  bid                Bid?             @relation(fields: [bidId], references: [id])
+  status             AssessmentStatus @default(DRAFT)
+  scopeGate          Json             // coverage %, unmatched lines, exclusion conflicts
+  bandLowCents       Int
+  bandHighCents      Int
+  pointEstimateCents Int              // internal midpoint — never shown as "the" price
+  bandPct            Float            // 0.15 labor-heavy custom, 0.10 commodity-unit
+  verdict            VerdictZone?
+  layers             Json             // full per-layer breakdown with provenance
+  assumptions        Json             // human-readable assumption list for the report
+  marketHeatFactor   Float            @default(1)
+  engineVersion      String
+  computedAt         DateTime
+  reviewedById       String?
+  reviewedAt         DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 }

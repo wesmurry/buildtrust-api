@@ -5,7 +5,8 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roles.js';
 import { validateBody } from '../middleware/validation.js';
 import { NotFoundError } from '../utils/errors.js';
-import { serializeSavingsEntry, kebabToEnum } from '../utils/serialize.js';
+import { serializeSavingsEntry, kebabToEnumStrict } from '../utils/serialize.js';
+import { SavingsCategory } from '@prisma/client';
 
 const createSavingsSchema = z.object({
   date: z.string(),
@@ -36,7 +37,7 @@ export async function savingsRoutes(app: FastifyInstance) {
         data: {
           projectId: request.params.id,
           date: new Date(date),
-          category: kebabToEnum(category),
+          category: kebabToEnumStrict(category, SavingsCategory),
           ...rest,
         },
       });
